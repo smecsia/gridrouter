@@ -3,7 +3,7 @@ package ru.qatools.gridrouter;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import ru.qatools.gridrouter.json.JsonFormatter;
-import ru.qatools.gridrouter.sessions.SessionStorage;
+import ru.qatools.gridrouter.sessions.StatsCounter;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -29,7 +29,7 @@ import static org.springframework.web.context.support.SpringBeanAutowiringSuppor
 public class StatsServlet extends HttpServlet {
 
     @Autowired
-    private SessionStorage sessionStorage;
+    private StatsCounter statsCounter;
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -44,7 +44,7 @@ public class StatsServlet extends HttpServlet {
         response.setContentType(APPLICATION_JSON_VALUE);
         try (OutputStream output = response.getOutputStream()) {
             IOUtils.write(JsonFormatter.toJson(
-                    sessionStorage.getBrowsersCountFor(request.getRemoteUser())
+                    statsCounter.getStats(request.getRemoteUser())
             ), output, UTF_8);
         }
     }
