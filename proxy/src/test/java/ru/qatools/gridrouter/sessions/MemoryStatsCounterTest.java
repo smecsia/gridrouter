@@ -5,6 +5,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Set;
 
 import static java.time.Duration.ZERO;
@@ -144,7 +145,7 @@ public class MemoryStatsCounterTest {
     }
 
     public Set<String> expiredSessions(Duration duration) {
-        Set<String> removedSessionIds = storage.getActiveSessions();
+        final Set<String> removedSessionIds = new HashSet<>(storage.getActiveSessions());
         storage.expireSessionsOlderThan(duration);
         removedSessionIds.removeAll(storage.getActiveSessions());
         return removedSessionIds;

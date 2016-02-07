@@ -42,10 +42,10 @@ public class ProxyServlet extends org.eclipse.jetty.proxy.ProxyServlet {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProxyServlet.class);
 
     @Autowired
-    private ConfigRepository config;
+    private transient ConfigRepository config;
 
     @Autowired
-    private StatsCounter statsCounter;
+    private transient StatsCounter statsCounter;
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -87,9 +87,9 @@ public class ProxyServlet extends org.eclipse.jetty.proxy.ProxyServlet {
 
         if (isSessionDeleteRequest(request, command)) {
             LOGGER.info("[SESSION_DELETED] [{}] [{}] [{}]", remoteHost, route, command);
-            statsCounter.deleteSession(getFullSessionId(uri));
+            statsCounter.deleteSession(getFullSessionId(uri), route);
         } else {
-            statsCounter.updateSession(getFullSessionId(uri));
+            statsCounter.updateSession(getFullSessionId(uri), route);
         }
 
         try {
