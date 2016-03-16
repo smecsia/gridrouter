@@ -20,6 +20,8 @@ import ru.qatools.gridrouter.config.Version;
 import ru.qatools.gridrouter.json.JsonCapabilities;
 import ru.qatools.gridrouter.json.JsonMessage;
 import ru.qatools.gridrouter.json.JsonMessageFactory;
+import ru.qatools.gridrouter.sessions.AvailableBrowserCheckExeption;
+import ru.qatools.gridrouter.sessions.AvailableBrowsersChecker;
 import ru.qatools.gridrouter.sessions.StatsCounter;
 
 import javax.servlet.ServletException;
@@ -57,17 +59,16 @@ public class RouteServlet extends SpringHttpServlet {
 
     @Autowired
     private transient ConfigRepository config;
-
     @Autowired
     private transient HostSelectionStrategy hostSelectionStrategy;
-
     @Autowired
     private transient StatsCounter statsCounter;
-
     @Autowired
     private transient CapabilityProcessorFactory capabilityProcessorFactory;
     
     private AtomicLong requestCounter = new AtomicLong();
+    @Autowired
+    private transient AvailableBrowsersChecker avblBrowsersChecker;
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
@@ -101,6 +102,10 @@ public class RouteServlet extends SpringHttpServlet {
         int attempt = 0;
         JsonMessage hubMessage = null;
         try (CloseableHttpClient client = newHttpClient()) {
+            if (actualVersion.getPermittedCount() != null) {
+                avblBrowsersChecker.ensureFreeBrowsersAvailable(user, remoteHost, browser, actualVersion);
+            }
+
             while (!allRegions.isEmpty()) {
                 attempt++;
 
@@ -144,6 +149,9 @@ public class RouteServlet extends SpringHttpServlet {
                     unvisitedRegions = new ArrayList<>(allRegions);
                 }
             }
+        } catch (AvailableBrowserCheckExeption e) {
+            LOGGER.error("[AVAILABLE_BROWSER_CHECK_ERROR] [{}] [{}] [{}] - {}",
+                    user, remoteHost, browser, e.getMessage());
         }
 
         LOGGER.error("[{}] [SESSION_NOT_CREATED] [{}] [{}] [{}]", requestId, user, remoteHost, browser);
@@ -153,6 +161,7 @@ public class RouteServlet extends SpringHttpServlet {
             replyWithError(hubMessage, response);
         }
     }
+
 
     protected void replyWithOk(JsonMessage message, HttpServletResponse response) throws IOException {
         reply(SC_OK, message, response);
