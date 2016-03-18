@@ -29,16 +29,24 @@ public class WaitAvailableBrowsersCheckerTest {
         version = new Version();
         version.setPermittedCount(10);
         version.setNumber("33");
+        when(counter.getSessionsCountForUserAndBrowser(eq("user"), eq("firefox"), eq("33"))).thenReturn(10);
     }
 
     @Test
     public void testWaitAvailableBrowsersChecker() throws Exception {
-        when(counter.getSessionsCountForUserAndBrowser(eq("user"), eq("firefox"), eq("33"))).thenReturn(10);
-
         Temporal started = now();
-        checker.ensureFreeBrowsersAvailable("user", "host", "firefox", version);
+        try {
+            checker.ensureFreeBrowsersAvailable("user", "host", "firefox", version);
+        } catch (WaitAvailableBrowserTimeoutException e) {
+            // do nothing
+        }
         verify(counter, times(3)).getSessionsCountForUserAndBrowser(eq("user"), eq("firefox"), eq("33"));
         assertThat(Duration.between(started, now()).toMillis(), greaterThanOrEqualTo(3000L));
+    }
+
+    @Test(expected = WaitAvailableBrowserTimeoutException.class)
+    public void testWaitAvailableBrowsersTimeout() throws Exception {
+        checker.ensureFreeBrowsersAvailable("user", "host", "firefox", version);
     }
 
     @Test

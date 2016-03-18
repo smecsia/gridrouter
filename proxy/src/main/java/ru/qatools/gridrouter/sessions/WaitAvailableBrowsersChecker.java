@@ -9,7 +9,7 @@ import ru.qatools.gridrouter.config.Version;
 import java.time.Duration;
 import java.time.temporal.Temporal;
 
-import static java.text.MessageFormat.format;
+import static java.lang.String.format;
 import static java.time.ZonedDateTime.now;
 import static java.util.UUID.randomUUID;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -52,7 +52,7 @@ public class WaitAvailableBrowsersChecker implements AvailableBrowsersChecker {
             } catch (InterruptedException e) {
                 LOGGER.error("Failed to sleep thread", e);
             }
-            if (maxWait.compareTo(Duration.between(waitingStarted, now())) > 0) {
+            if (maxWait.compareTo(Duration.between(waitingStarted, now())) < 0) {
                 onWaitTimeout(user, browser, version, requestId, waitAttempt);
             }
         }
