@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -64,6 +65,8 @@ public class RouteServlet extends SpringHttpServlet {
     private transient StatsCounter statsCounter;
     @Autowired
     private transient CapabilityProcessorFactory capabilityProcessorFactory;
+    
+    private AtomicLong requestCounter = new AtomicLong();
     @Autowired
     private transient AvailableBrowsersChecker avblBrowsersChecker;
 
@@ -71,6 +74,8 @@ public class RouteServlet extends SpringHttpServlet {
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        long requestId = requestCounter.getAndIncrement();
+        
         JsonMessage message = JsonMessageFactory.from(request.getInputStream());
         JsonCapabilities caps = message.getDesiredCapabilities();
 
@@ -80,7 +85,7 @@ public class RouteServlet extends SpringHttpServlet {
         Version actualVersion = config.findVersion(user, caps);
 
         if (actualVersion == null) {
-            LOGGER.warn("[UNSUPPORTED_BROWSER] [{}] [{}] [{}]", user, remoteHost, browser);
+            LOGGER.warn("[{}] [UNSUPPORTED_BROWSER] [{}] [{}] [{}]", requestId, user, remoteHost, browser);
             replyWithError(format("Cannot find %s capabilities on any available node",
                     caps.describe()), response);
             return;
@@ -109,7 +114,7 @@ public class RouteServlet extends SpringHttpServlet {
 
                 String route = host.getRoute();
                 try {
-                    LOGGER.info("[SESSION_ATTEMPTED] [{}] [{}] [{}] [{}] [{}]", user, remoteHost, browser, route, attempt);
+                    LOGGER.info("[{}] [SESSION_ATTEMPTED] [{}] [{}] [{}] [{}] [{}]", requestId, user, remoteHost, browser, route, attempt);
 
                     String target = route + request.getRequestURI();
                     HttpResponse hubResponse = client.execute(post(target, message));
@@ -119,19 +124,19 @@ public class RouteServlet extends SpringHttpServlet {
                         String sessionId = hubMessage.getSessionId();
                         hubMessage.setSessionId(host.getRouteId() + sessionId);
                         replyWithOk(hubMessage, response);
-                        LOGGER.info("[SESSION_CREATED] [{}] [{}] [{}] [{}] [{}] [{}]",
-                                user, remoteHost, browser, route, sessionId, attempt);
+                        LOGGER.info("[{}] [SESSION_CREATED] [{}] [{}] [{}] [{}] [{}] [{}]",
+                                requestId, user, remoteHost, browser, route, sessionId, attempt);
                         statsCounter.startSession(hubMessage.getSessionId(), user, browser, actualVersion.getNumber(), route);
                         return;
                     }
-                    LOGGER.warn("[SESSION_FAILED] [{}] [{}] [{}] [{}] - {}",
-                            user, remoteHost, browser, route, hubMessage.getErrorMessage());
+                    LOGGER.warn("[{}] [SESSION_FAILED] [{}] [{}] [{}] [{}] - {}",
+                            requestId, user, remoteHost, browser, route, hubMessage.getErrorMessage());
                 } catch (JsonProcessingException exception) {
-                    LOGGER.error("[BAD_HUB_JSON] [{}] [{}] [{}] - {}", "",
-                            user, remoteHost, browser, route, exception.getMessage());
+                    LOGGER.error("[{}] [BAD_HUB_JSON] [{}] [{}] [{}] - {}", "",
+                            requestId, user, remoteHost, browser, route, exception.getMessage());
                 } catch (IOException exception) {
-                    LOGGER.error("[HUB_COMMUNICATION_FAILURE] [{}] [{}] [{}] - {}",
-                            user, remoteHost, browser, route, exception.getMessage());
+                    LOGGER.error("[{}] [HUB_COMMUNICATION_FAILURE] [{}] [{}] [{}] - {}",
+                            requestId, user, remoteHost, browser, route, exception.getMessage());
                 }
 
                 currentRegion.getHosts().remove(host);
@@ -149,7 +154,7 @@ public class RouteServlet extends SpringHttpServlet {
                     user, remoteHost, browser, e.getMessage());
         }
 
-        LOGGER.error("[SESSION_NOT_CREATED] [{}] [{}] [{}]", user, remoteHost, browser);
+        LOGGER.error("[{}] [SESSION_NOT_CREATED] [{}] [{}] [{}]", requestId, user, remoteHost, browser);
         if (hubMessage == null) {
             replyWithError("Cannot create session on any available node", response);
         } else {

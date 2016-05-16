@@ -17,7 +17,7 @@
 
     <groupId>ru.qatools.seleniumkit</groupId>
     <artifactId>gridrouter</artifactId>
-    <version>1.29-SNAPSHOT</version>
+    <version>1.30-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
