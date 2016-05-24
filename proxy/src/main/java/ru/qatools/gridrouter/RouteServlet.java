@@ -68,10 +68,8 @@ public class RouteServlet extends SpringHttpServlet {
     private transient CapabilityProcessorFactory capabilityProcessorFactory;
     @Autowired
     private transient AvailableBrowsersChecker avblBrowsersChecker;
-    
+
     private AtomicLong requestCounter = new AtomicLong();
-    @Autowired
-    private transient AvailableBrowsersChecker avblBrowsersChecker;
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
