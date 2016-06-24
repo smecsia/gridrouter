@@ -155,7 +155,7 @@ public class RouteServlet extends SpringHttpServlet {
 
         int attempt = 0;
         JsonMessage hubMessage = null;
-        try (CloseableHttpClient client = newHttpClient(routeTimeout)) {
+        try (CloseableHttpClient client = newHttpClient(routeTimeout * 1000)) {
             if (actualVersion.getPermittedCount() != null) {
                 avblBrowsersChecker.ensureFreeBrowsersAvailable(user, remoteHost, browser, actualVersion);
             }
