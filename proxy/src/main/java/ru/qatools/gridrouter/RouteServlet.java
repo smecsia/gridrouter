@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.String.format;
@@ -80,29 +81,30 @@ public class RouteServlet extends SpringHttpServlet {
 
     private AtomicLong requestCounter = new AtomicLong();
 
-    private volatile boolean stop;
-
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
         JsonMessage message = JsonMessageFactory.from(request.getInputStream());
 
-        Future<Object> future = executor.submit(getRouteCallable(request, message, response));
+        int routeTimeout = getRouteTimeout(request.getRemoteUser(), message);
+        AtomicBoolean terminated = new AtomicBoolean(false);
+        Future<Object> future = executor.submit(getRouteCallable(request, message, response, terminated));
         executor.schedule((Runnable) () -> future.cancel(true), routeTimeout, TimeUnit.SECONDS);
         executor.shutdown();
         try {
-            executor.awaitTermination(getRouteTimeout(request.getRemoteUser(), message), TimeUnit.SECONDS);
-            stop = true;
+            executor.awaitTermination(routeTimeout, TimeUnit.SECONDS);
+            terminated.set(true);
         } catch (InterruptedException e) {
             executor.shutdownNow();
         }
         replyWithError("Timed out when searching for valid host", response);
     }
 
-    private Callable<Object> getRouteCallable(HttpServletRequest request, JsonMessage message, HttpServletResponse response) {
+    private Callable<Object> getRouteCallable(HttpServletRequest request, JsonMessage message,
+                                              HttpServletResponse response, AtomicBoolean terminated) {
         return () -> {
-            route(request, message, response);
+            route(request, message, response, terminated);
             return null;
         };
     }
@@ -122,7 +124,8 @@ public class RouteServlet extends SpringHttpServlet {
         return routeTimeout;
     }
 
-    private void route(HttpServletRequest request, JsonMessage message, HttpServletResponse response) throws IOException {
+    private void route(HttpServletRequest request, JsonMessage message,
+                       HttpServletResponse response, AtomicBoolean terminated) throws IOException {
 
         long requestId = requestCounter.getAndIncrement();
         long initialSeconds = Instant.now().getEpochSecond();
@@ -156,7 +159,7 @@ public class RouteServlet extends SpringHttpServlet {
                 avblBrowsersChecker.ensureFreeBrowsersAvailable(user, remoteHost, browser, actualVersion);
             }
 
-            while (!allRegions.isEmpty() && !stop) {
+            while (!allRegions.isEmpty() && !terminated.get()) {
                 attempt++;
 
                 Region currentRegion = hostSelectionStrategy.selectRegion(allRegions, unvisitedRegions);
@@ -183,7 +186,7 @@ public class RouteServlet extends SpringHttpServlet {
                     LOGGER.warn("[{}] [SESSION_FAILED] [{}] [{}] [{}] [{}] - {}",
                             requestId, user, remoteHost, browser, route, hubMessage.getErrorMessage());
                 } catch (JsonProcessingException exception) {
-                    LOGGER.error("[{}] [BAD_HUB_JSON] [{}] [{}] [{}] - {}", "",
+                    LOGGER.error("[{}] [BAD_HUB_JSON] [{}] [{}] [{}] [{}] - {}", "",
                             requestId, user, remoteHost, browser, route, exception.getMessage());
                 } catch (IOException exception) {
                     LOGGER.error("[{}] [HUB_COMMUNICATION_FAILURE] [{}] [{}] [{}] - {}",
@@ -201,8 +204,8 @@ public class RouteServlet extends SpringHttpServlet {
                 }
             }
         } catch (AvailableBrowserCheckExeption e) {
-            LOGGER.error("[AVAILABLE_BROWSER_CHECK_ERROR] [{}] [{}] [{}] - {}",
-                    user, remoteHost, browser, e.getMessage());
+            LOGGER.error("[{}] [AVAILABLE_BROWSER_CHECK_ERROR] [{}] [{}] [{}] - {}",
+                    requestId, user, remoteHost, browser, e.getMessage());
         }
 
         LOGGER.error("[{}] [SESSION_NOT_CREATED] [{}] [{}] [{}]", requestId, user, remoteHost, browser);
