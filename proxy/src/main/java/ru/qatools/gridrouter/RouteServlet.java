@@ -89,7 +89,7 @@ public class RouteServlet extends SpringHttpServlet {
 
         int routeTimeout = getRouteTimeout(request.getRemoteUser(), message);
         AtomicBoolean terminated = new AtomicBoolean(false);
-        Future<Object> future = executor.submit(getRouteCallable(request, message, response, terminated));
+        Future<Object> future = executor.submit(getRouteCallable(request, message, response, routeTimeout, terminated));
         executor.schedule((Runnable) () -> future.cancel(true), routeTimeout, TimeUnit.SECONDS);
         executor.shutdown();
         try {
@@ -101,10 +101,10 @@ public class RouteServlet extends SpringHttpServlet {
         replyWithError("Timed out when searching for valid host", response);
     }
 
-    private Callable<Object> getRouteCallable(HttpServletRequest request, JsonMessage message,
-                                              HttpServletResponse response, AtomicBoolean terminated) {
+    private Callable<Object> getRouteCallable(HttpServletRequest request, JsonMessage message, HttpServletResponse response,
+                                              int routeTimeout, AtomicBoolean terminated) {
         return () -> {
-            route(request, message, response, terminated);
+            route(request, message, response, routeTimeout, terminated);
             return null;
         };
     }
@@ -125,7 +125,8 @@ public class RouteServlet extends SpringHttpServlet {
     }
 
     private void route(HttpServletRequest request, JsonMessage message,
-                       HttpServletResponse response, AtomicBoolean terminated) throws IOException {
+                       HttpServletResponse response,
+                       int routeTimeout, AtomicBoolean terminated) throws IOException {
 
         long requestId = requestCounter.getAndIncrement();
         long initialSeconds = Instant.now().getEpochSecond();
@@ -154,7 +155,7 @@ public class RouteServlet extends SpringHttpServlet {
 
         int attempt = 0;
         JsonMessage hubMessage = null;
-        try (CloseableHttpClient client = newHttpClient()) {
+        try (CloseableHttpClient client = newHttpClient(routeTimeout)) {
             if (actualVersion.getPermittedCount() != null) {
                 avblBrowsersChecker.ensureFreeBrowsersAvailable(user, remoteHost, browser, actualVersion);
             }
@@ -247,11 +248,12 @@ public class RouteServlet extends SpringHttpServlet {
         return method;
     }
 
-    protected CloseableHttpClient newHttpClient() {
+    protected CloseableHttpClient newHttpClient(int maxTimeout) {
         return HttpClientBuilder.create().setDefaultRequestConfig(
                 RequestConfig.custom()
                         .setConnectionRequestTimeout(10000)
                         .setConnectTimeout(10000)
+                        .setSocketTimeout(maxTimeout)
                         .build()
         ).setRedirectStrategy(new LaxRedirectStrategy()).disableAutomaticRetries().build();
     }
